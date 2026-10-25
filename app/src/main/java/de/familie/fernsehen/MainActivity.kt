@@ -188,9 +188,11 @@ class MainActivity : Activity() {
         // Mehr als Full HD überfordert schwache Boxen nur.
         p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
             .setMaxVideoSize(1920, 1080)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
             .build()
         p.addListener(playerListener)
         playerView.player = p
+        playerView.subtitleView?.visibility = View.GONE
         player = p
     }
 
