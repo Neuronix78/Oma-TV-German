@@ -39,7 +39,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: gradle assembleRelease --no-daemon --stacktrace
 
-            - name: APKs umbenennen
+      - name: APKs umbenennen
         run: |
           cp app/build/outputs/apk/voll/release/*.apk "fernsehen-${{ github.run_number }}.apk"
           cp app/build/outputs/apk/lite/release/*.apk "fernsehen-lite-${{ github.run_number }}.apk"
