@@ -32,6 +32,7 @@ import java.util.concurrent.Executors
  *  OK, links, rechts  -> Senderliste
  *  Zurück kurz        -> Liste bzw. Abfrage schließen
  *  Zurück 3 s halten  -> "Fernsehen verlassen?"
+ *  (Lite-Version: schon kurzes Zurück fragt "Fernsehen beenden?")
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 class MainActivity : Activity() {
@@ -96,9 +97,18 @@ class MainActivity : Activity() {
         adapter.submit(channels)
 
         exitNo.setOnClickListener { hideExitDialog() }
-        exitYes.setOnClickListener {
-            hideExitDialog()
-            startActivity(Intent(this, AppsActivity::class.java))
+        if (BuildConfig.IS_LAUNCHER) {
+            exitYes.setOnClickListener {
+                hideExitDialog()
+                startActivity(Intent(this, AppsActivity::class.java))
+            }
+        } else {
+            // Lite-Version: die App wird einfach beendet
+            (exitYes as TextView).setText(R.string.exit_yes_lite)
+            exitYes.setOnClickListener {
+                hideExitDialog()
+                finish()
+            }
         }
     }
 
@@ -185,7 +195,7 @@ class MainActivity : Activity() {
                 .build(),
             true
         )
-        // Mehr als Full HD überfordert schwache Boxen nur.
+        // Mehr als Full HD überfordert schwache Boxen nur. Untertitel sind abgeschaltet.
         p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
             .setMaxVideoSize(1920, 1080)
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
@@ -417,6 +427,8 @@ class MainActivity : Activity() {
         when {
             exitPanel.visibility == View.VISIBLE -> hideExitDialog()
             listPanel.visibility == View.VISIBLE -> hideChannelList()
+            // Lite-Version: kurzes Zurück fragt direkt, ob man beenden möchte
+            !BuildConfig.IS_LAUNCHER -> showExitDialog()
             else -> showInfo()
         }
     }

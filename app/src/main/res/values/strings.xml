@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Fernsehen</string>
     <string name="status_loading">Sender wird geladen …</string>
     <string name="status_error">Dieser Sender ist gerade nicht erreichbar.\nEs wird gleich automatisch erneut versucht.</string>
     <string name="status_no_channels">Keine Senderliste gefunden.\nBitte die Internetverbindung prüfen.</string>
@@ -10,6 +9,7 @@
     <string name="exit_question">Fernsehen verlassen?</string>
     <string name="exit_no">Nein, weiter fernsehen</string>
     <string name="exit_yes">Ja, andere Apps öffnen</string>
+    <string name="exit_yes_lite">Ja, Fernsehen beenden</string>
     <string name="apps_title">Andere Apps</string>
     <string name="apps_hint">Mit der Home-Taste geht es jederzeit zurück zum Fernsehen.</string>
     <string name="back_to_tv">Zurück zum Fernsehen</string>

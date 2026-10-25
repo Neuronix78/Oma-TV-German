@@ -27,6 +27,25 @@ android {
         buildConfigField("String", "PLAYLIST_URL", "\"$playlistUrl\"")
     }
 
+    // Zwei Varianten aus demselben Code:
+    //  voll = ersetzt den Startbildschirm der Box (für Mama)
+    //  lite = ganz normale App, die man öffnen und wieder schließen kann
+    flavorDimensions += "variante"
+    productFlavors {
+        create("voll") {
+            dimension = "variante"
+            buildConfigField("boolean", "IS_LAUNCHER", "true")
+            resValue("string", "app_name", "Fernsehen")
+        }
+        create("lite") {
+            dimension = "variante"
+            applicationIdSuffix = ".lite"
+            versionNameSuffix = "-lite"
+            buildConfigField("boolean", "IS_LAUNCHER", "false")
+            resValue("string", "app_name", "Fernsehen Lite")
+        }
+    }
+
     signingConfigs {
         if (keystoreFile != null) {
             create("release") {
