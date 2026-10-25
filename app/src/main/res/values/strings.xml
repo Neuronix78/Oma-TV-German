@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Fernsehen</string>
+    <string name="status_loading">Sender wird geladen …</string>
+    <string name="status_error">Dieser Sender ist gerade nicht erreichbar.\nEs wird gleich automatisch erneut versucht.</string>
+    <string name="status_no_channels">Keine Senderliste gefunden.\nBitte die Internetverbindung prüfen.</string>
+    <string name="channel_info">%1$d   %2$s</string>
+    <string name="list_title">Senderliste</string>
+    <string name="list_hint">Sender auswählen und OK drücken</string>
+    <string name="exit_question">Fernsehen verlassen?</string>
+    <string name="exit_no">Nein, weiter fernsehen</string>
+    <string name="exit_yes">Ja, andere Apps öffnen</string>
+    <string name="apps_title">Andere Apps</string>
+    <string name="apps_hint">Mit der Home-Taste geht es jederzeit zurück zum Fernsehen.</string>
+    <string name="back_to_tv">Zurück zum Fernsehen</string>
+    <string name="original_home">Startbildschirm: %1$s</string>
+    <string name="choose_home">Standard-Startbildschirm ändern</string>
+    <string name="android_settings">Android-Einstellungen</string>
+    <string name="open_failed">Konnte nicht geöffnet werden.</string>
+</resources>
