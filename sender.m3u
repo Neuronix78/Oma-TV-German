@@ -31,3 +31,13 @@ https://mdrtvsnhls.akamaized.net/hls/live/2016928/mdrtvsn/master.m3u8
 https://mcdn.br.de/br/fs/bfs_nord/hls/de/master.m3u8
 #EXTINF:-1 tvg-logo="https://raw.githubusercontent.com/jnk22/kodinerds-iptv/master/logos/tv/welt.png",WELT
 https://welt.personalstream.tv/v1/master.m3u8
+#EXTINF:-1 tvg-logo="https://raw.githubusercontent.com/jnk22/kodinerds-iptv/master/logos/tv/weltderwunder.png",Welt der Wunder
+https://wdw.iptv-playoutcenter.de/wdw/wdw1/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://raw.githubusercontent.com/jnk22/kodinerds-iptv/master/logos/tv/anixehd.png",ANIXE HD
+https://ma.anixa.tv/clips/stream/anixehd/index.m3u8
+#EXTINF:-1 tvg-logo="https://raw.githubusercontent.com/jnk22/kodinerds-iptv/master/logos/tv/dokusat.png",Dokusat
+https://muc3.iptv-playoutcenter.de/dokusat/dokusat1/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://raw.githubusercontent.com/jnk22/kodinerds-iptv/master/logos/tv/kika.png",KiKA
+https://kikageohls.akamaized.net/hls/live/2022693/livetvkika_de/master.m3u8
+#EXTINF:-1 tvg-logo="https://raw.githubusercontent.com/jnk22/kodinerds-iptv/master/logos/tv/df1.png",DF1 HD
+https://d287776cjxyfeq.cloudfront.net/out/v1/08823cd7fba74508a5a577fd51dc41f6/index.m3u8
