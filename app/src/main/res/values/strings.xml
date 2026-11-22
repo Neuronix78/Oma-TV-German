@@ -2,14 +2,46 @@
 <resources>
     <string name="status_loading">Sender wird geladen …</string>
     <string name="status_error">Dieser Sender ist gerade nicht erreichbar.\nEs wird gleich automatisch erneut versucht.</string>
-    <string name="status_no_channels">Keine Senderliste gefunden.\nBitte die Internetverbindung prüfen.</string>
+    <string name="status_no_channels">Senderliste wird aus dem Internet geladen …\nBitte einen Moment Geduld.</string>
+    <string name="status_waiting_net">Warte auf Internet …\nDas Fernsehen startet von selbst, sobald die Verbindung steht.</string>
     <string name="channel_info">%1$d   %2$s</string>
-    <string name="list_title">Senderliste</string>
+
+    <string name="list_title">Meine Sender</string>
     <string name="list_hint">Sender auswählen und OK drücken</string>
+    <string name="edit_title">Meine Sender bearbeiten</string>
+    <string name="edit_hint">OK: Sender anheben · Links: entfernen · Zurück: fertig</string>
+    <string name="edit_hint_moving">Hoch / Runter: verschieben · OK: ablegen</string>
+    <string name="action_all_channels">Alle Sender …</string>
+    <string name="action_add_channels">＋  Sender hinzufügen …</string>
+    <string name="action_reset">Auf Vorgabe zurücksetzen</string>
+    <string name="name_missing">%1$s  (nicht mehr verfügbar)</string>
+    <string name="name_unreachable">%1$s  (nicht erreichbar)</string>
+
+    <string name="all_title">Alle Sender</string>
+    <string name="all_hint">Links Gruppe wählen, rechts Sender · OK: ansehen oder hinzufügen · Zurück: schließen</string>
+    <string name="all_loading">Senderliste wird geladen …\nBitte einen Moment Geduld.</string>
+    <string name="all_empty">In dieser Gruppe sind derzeit keine Sender erreichbar.</string>
+
+    <string name="action_watch">Ansehen</string>
+    <string name="action_add">Zu „Meine Sender“ hinzufügen</string>
+    <string name="action_already">Ist schon in „Meine Sender“</string>
+    <string name="cancel">Abbrechen</string>
+    <string name="added_toast">„%1$s“ ist jetzt Platz %2$d in „Meine Sender“.</string>
+    <string name="group_unreachable">%1$s · derzeit nicht erreichbar</string>
+
+    <string name="remove_question">„%1$s“ entfernen?</string>
+    <string name="remove_text">Der Sender wird aus „Meine Sender“ entfernt. Unter „Alle Sender“ ist er weiterhin zu finden.</string>
+    <string name="remove_yes">Ja, entfernen</string>
+    <string name="remove_no">Nein, behalten</string>
+    <string name="reset_question">Auf Vorgabe zurücksetzen?</string>
+    <string name="reset_text">Alle Änderungen an „Meine Sender“ gehen verloren. Es gilt wieder die Senderliste aus dem Internet.</string>
+    <string name="reset_yes">Ja, zurücksetzen</string>
+
     <string name="exit_question">Fernsehen verlassen?</string>
     <string name="exit_no">Nein, weiter fernsehen</string>
     <string name="exit_yes">Ja, andere Apps öffnen</string>
     <string name="exit_yes_lite">Ja, Fernsehen beenden</string>
+
     <string name="apps_title">Andere Apps</string>
     <string name="apps_hint">Mit der Home-Taste geht es jederzeit zurück zum Fernsehen.</string>
     <string name="back_to_tv">Zurück zum Fernsehen</string>

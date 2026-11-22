@@ -8,6 +8,9 @@ plugins {
 val githubRepo = System.getenv("GITHUB_REPOSITORY") ?: ""
 val playlistUrl =
     if (githubRepo.isNotEmpty()) "https://raw.githubusercontent.com/$githubRepo/main/sender.m3u" else ""
+// Gesamtliste aller Sender, wird jeden Morgen von GitHub neu gebaut (alle-sender.json)
+val catalogUrl =
+    if (githubRepo.isNotEmpty()) "https://raw.githubusercontent.com/$githubRepo/main/alle-sender.json" else ""
 
 // Jede neue Version bekommt eine höhere Nummer, damit Updates sauber installiert werden.
 val buildNumber = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
@@ -23,8 +26,9 @@ android {
         minSdk = 21
         targetSdk = 34
         versionCode = buildNumber
-        versionName = "1.0.$buildNumber"
+        versionName = "2.0.$buildNumber"
         buildConfigField("String", "PLAYLIST_URL", "\"$playlistUrl\"")
+        buildConfigField("String", "CATALOG_URL", "\"$catalogUrl\"")
     }
 
     // Zwei Varianten aus demselben Code:
@@ -35,14 +39,14 @@ android {
         create("voll") {
             dimension = "variante"
             buildConfigField("boolean", "IS_LAUNCHER", "true")
-            resValue("string", "app_name", "Fernsehen")
+            resValue("string", "app_name", "OmaTV")
         }
         create("lite") {
             dimension = "variante"
             applicationIdSuffix = ".lite"
             versionNameSuffix = "-lite"
             buildConfigField("boolean", "IS_LAUNCHER", "false")
-            resValue("string", "app_name", "Fernsehen Lite")
+            resValue("string", "app_name", "OmaTV Lite")
         }
     }
 
@@ -90,6 +94,7 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.media3:media3-exoplayer:1.5.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.5.1")
+    implementation("androidx.media3:media3-exoplayer-dash:1.5.1")
     implementation("androidx.media3:media3-ui:1.5.1")
     implementation("io.coil-kt:coil:2.7.0")
 }

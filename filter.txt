@@ -1,0 +1,53 @@
+# Filter für die Gesamtliste (alle-sender.json)
+#
+# Jede Zeile mit "-" sperrt alle Sender, deren Name mit diesem Wort
+# beginnt bzw. es enthält (Groß/Klein egal, "- HSE" trifft auch "HSE24 Extra").
+# Enthält die Regel einen Punkt, gilt sie für die Stream-Adresse
+# (z. B. "- beispiel-server.de").
+# Jede Zeile mit "+" erlaubt einen Sender ausdrücklich, auch wenn
+# er sonst durch eine "-"-Zeile gesperrt wäre.
+# Zeilen mit # sind Kommentare.
+#
+# Es kommen nur deutsche Sender in die Liste. Fremdsprachige Sender werden
+# außerdem automatisch anhand der Sprachangaben der Quellen aussortiert.
+
+# --- Teleshopping ---
+- QVC
+- HSE
+- Juwelo
+- KaufBei
+- Sonnenklar
+- Shop LC
+- Pearl TV
+- iSTUFF
+- Handystar
+- Teleshopping
+- Tele Shopping
+- Shopping
+
+# --- Fremdsprachig, aber in den Quellen als deutsch einsortiert ---
+- DW English
+- DW Espanol
+- DW Español
+- DW Arabic
+- DW Arabia
+- DW Russian
+- Sophia TV Espa
+- Sophia TV Fran
+- Sophia TV Ital
+- Terra Mater WILD English
+- Da Vinci Asia
+- TVRUS
+- Adria
+- Bozsike
+- YOL TV
+
+# --- Kein deutscher Sender (Schweiz), nur als Weiterverbreitung vorhanden ---
+- SRF
+
+# --- EU-sanktioniert ---
+- RT DE
+
+# --- Beispiele für eigene Regeln ---
+# - Sendername der weg soll
+# + Sendername der trotz Sperre bleiben soll

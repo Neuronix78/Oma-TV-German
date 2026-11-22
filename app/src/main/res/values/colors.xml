@@ -5,4 +5,6 @@
     <color name="text">#FFFFFF</color>
     <color name="text_dim">#B8C4D2</color>
     <color name="button_idle">#33FFFFFF</color>
+    <color name="moving">#2E7D32</color>
+    <color name="country_selected">#3A5375</color>
 </resources>
