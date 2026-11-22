@@ -30,32 +30,26 @@ import androidx.media3.ui.PlayerView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
-import java.util.Collections
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /**
- * Das Fernsehbild. Bedienung:
+ * Das Fernsehbild.
+ *
+ *  Start:  ggf. "Warte auf Internet …" -> sender.m3u von GitHub holen
+ *          (sonst letzte geladene Kopie, sonst Notfall-Kopie aus der App) -> Bild startet.
  *
  *  Fernsehbild
  *    hoch / runter        -> nächster / vorheriger Sender aus "Meine Sender"
  *    OK, links, rechts    -> Liste "Meine Sender"
- *    Zurück 3 s halten    -> "Fernsehen verlassen?" (Lite: schon kurzes Zurück)
+ *    Zurück 3 s halten    -> "OmaTV verlassen?" (Lite: schon kurzes Zurück)
  *
- *  Meine Sender
- *    OK                   -> umschalten; letzte Zeile "Alle Sender …"
- *    OK 3 s halten        -> Bearbeiten-Modus
- *
- *  Bearbeiten-Modus
- *    OK                   -> Sender anheben / ablegen, dazwischen hoch/runter = verschieben
- *    links                -> Sender entfernen (mit Rückfrage)
- *    Zurück               -> fertig
+ *  Meine Sender (= sender.m3u aus dem GitHub-Repo, an der Box nicht änderbar)
+ *    OK                   -> umschalten
+ *    "Alle Sender …"      -> OK 3 Sekunden halten öffnet die Gesamtliste
  *
  *  Alle Sender
- *    links Gruppen, rechts Sender, OK -> "Ansehen" / "Zu Meine Sender hinzufügen"
- *
- *  Ohne Internet steht "Warte auf Internet …" da; sobald die Verbindung steht,
- *  werden die Listen von GitHub geholt und das Bild startet von selbst.
+ *    links Gruppen, rechts Sender, OK -> ansehen
  */
 @androidx.annotation.OptIn(UnstableApi::class)
 class MainActivity : Activity(), FavAdapter.Listener {
@@ -67,8 +61,6 @@ class MainActivity : Activity(), FavAdapter.Listener {
     private lateinit var infoLogo: ImageView
     private lateinit var infoText: TextView
     private lateinit var listPanel: View
-    private lateinit var listTitle: TextView
-    private lateinit var listHint: TextView
     private lateinit var channelList: RecyclerView
     private lateinit var allPanel: View
     private lateinit var allEmpty: TextView
@@ -97,7 +89,14 @@ class MainActivity : Activity(), FavAdapter.Listener {
     private val workingUrl = HashMap<String, Int>()
     private var reportedOk = false
     private var catalog: Catalog? = null
-    private var missingKeys: Set<String> = emptySet()
+
+    // ---------- Start-Ablauf ----------
+    /** true, sobald die Senderliste für diesen Start abgeglichen ist – erst dann läuft der Stream. */
+    private var listReady = false
+    private var listLoading = false
+    private var waitingForNet = false
+    private var networkCallbackRegistered = false
+    private var lastDefaultsRefresh = 0L
 
     // ---------- Wiedergabe ----------
     private var player: ExoPlayer? = null
@@ -105,17 +104,11 @@ class MainActivity : Activity(), FavAdapter.Listener {
     private var retryCount = 0
 
     // ---------- Bedienung ----------
-    private var editMode = false
-    private var movingIndex = -1
-    private var allOpenedFromEdit = false
     private var selectedGroup = 0
     private var pendingGroup = -1
     @Volatile private var checkGeneration = 0
     private var dialogActions: List<() -> Unit> = emptyList()
     private var focusBeforeDialog: View? = null
-    private var lastDefaultsRefresh = 0L
-    private var waitingForNet = false
-    private var networkCallbackRegistered = false
 
     private val hideInfo = Runnable { infoBox.visibility = View.GONE }
     private val hideList = Runnable { hideFavList() }
@@ -125,6 +118,7 @@ class MainActivity : Activity(), FavAdapter.Listener {
     private val retry = Runnable { playCurrent() }
     private val delayedStart = Runnable { playCurrent() }
     private val applyGroup = Runnable { if (pendingGroup >= 0) selectGroup(pendingGroup) }
+
     /** Solange kein Internet da ist: alle 5 Sekunden nachsehen. */
     private val waitNet = object : Runnable {
         override fun run() {
@@ -132,19 +126,14 @@ class MainActivity : Activity(), FavAdapter.Listener {
         }
     }
 
-    /** Solange noch gar keine Senderliste da ist: alle 15 Sekunden erneut laden. */
-    private val fetchUntilChannels = object : Runnable {
-        override fun run() {
-            if (playing != null) return
-            refreshDefaults()
-            refreshCatalog()
-            handler.postDelayed(this, 15_000)
-        }
-    }
-
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            handler.post { if (waitingForNet) handler.postDelayed(waitNet, 1_500) }
+            handler.post {
+                if (waitingForNet) {
+                    handler.removeCallbacks(waitNet)
+                    handler.postDelayed(waitNet, 1_500)
+                }
+            }
         }
     }
 
@@ -164,7 +153,6 @@ class MainActivity : Activity(), FavAdapter.Listener {
     companion object {
         private const val REFRESH_INTERVAL = 3 * 60 * 60 * 1000L
         private const val LIST_TIMEOUT = 10_000L
-        private const val EDIT_TIMEOUT = 120_000L
         private const val ALL_TIMEOUT = 120_000L
         private const val DIALOG_TIMEOUT = 30_000L
         private const val MAX_CHECKS = 400
@@ -185,8 +173,6 @@ class MainActivity : Activity(), FavAdapter.Listener {
         infoLogo = findViewById(R.id.infoLogo)
         infoText = findViewById(R.id.infoText)
         listPanel = findViewById(R.id.listPanel)
-        listTitle = findViewById(R.id.listTitle)
-        listHint = findViewById(R.id.listHint)
         channelList = findViewById(R.id.channelList)
         allPanel = findViewById(R.id.allPanel)
         allEmpty = findViewById(R.id.allEmpty)
@@ -212,9 +198,9 @@ class MainActivity : Activity(), FavAdapter.Listener {
         catalogRepo = CatalogRepository(this)
         health = HealthStore(filesDir)
 
-        favorites = favStore.load()
+        // Vorläufig die zuletzt bekannte Liste; abgespielt wird erst nach dem Abgleich mit GitHub.
+        favorites = favStore.loadLocal().toMutableList()
         favIndex = favStore.findLastIndex(favorites)
-        playing = favorites.getOrNull(favIndex)
 
         favAdapter = FavAdapter(this)
         channelList.layoutManager = LinearLayoutManager(this)
@@ -238,7 +224,7 @@ class MainActivity : Activity(), FavAdapter.Listener {
         allList.itemAnimator = null
         allList.adapter = allAdapter
 
-        // Gesamtliste im Hintergrund laden (eigene Kopie oder eingebaute Notfall-Kopie)
+        // Gesamtliste im Hintergrund laden (nur für Ersatzadressen und "Alle Sender")
         runInBackground {
             val local = catalogRepo.loadLocal()
             if (local != null) handler.post { if (catalog == null) applyCatalog(local) }
@@ -248,13 +234,12 @@ class MainActivity : Activity(), FavAdapter.Listener {
     override fun onStart() {
         super.onStart()
         createPlayer()
-        playCurrent()
-        showInfo()
-        refreshDefaults()
+        registerNetworkCallback()
+        listReady = false
+        loadListThenPlay()
         refreshCatalog()
         handler.removeCallbacks(periodicRefresh)
         handler.postDelayed(periodicRefresh, REFRESH_INTERVAL)
-        registerNetworkCallback()
     }
 
     override fun onStop() {
@@ -264,7 +249,6 @@ class MainActivity : Activity(), FavAdapter.Listener {
         handler.removeCallbacks(showLoading)
         handler.removeCallbacks(periodicRefresh)
         handler.removeCallbacks(waitNet)
-        handler.removeCallbacks(fetchUntilChannels)
         waitingForNet = false
         unregisterNetworkCallback()
         playerView.player = null
@@ -281,7 +265,7 @@ class MainActivity : Activity(), FavAdapter.Listener {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // Home-Taste gedrückt, während das Fernsehen schon läuft
+        // Home-Taste gedrückt, während OmaTV schon läuft
         closeAllPanels()
     }
 
@@ -290,9 +274,70 @@ class MainActivity : Activity(), FavAdapter.Listener {
         if (hasFocus) hideSystemBars()
     }
 
+    private fun runInBackground(task: () -> Unit) {
+        if (io.isShutdown) return
+        runCatching { io.execute(task) }
+    }
+
+    // =====================================================================
+    // Start-Ablauf: Internet -> Senderliste von GitHub -> Stream
+    // =====================================================================
+
+    private fun loadListThenPlay() {
+        if (!isOnline()) {
+            waitForInternet()
+            return
+        }
+        showStatus(getString(R.string.status_loading_list))
+        if (listLoading) return
+        listLoading = true
+        runInBackground {
+            val fresh = favStore.fetchDefaultRemote()
+            handler.post {
+                listLoading = false
+                // GitHub nicht erreichbar: letzte geladene Kopie bzw. Notfall-Kopie aus der App
+                applyList(fresh ?: favStore.loadLocal(), atStart = true)
+                listReady = true
+                lastDefaultsRefresh = System.currentTimeMillis()
+                val first = favorites.getOrNull(favIndex)
+                if (first == null) {
+                    showStatus(getString(R.string.status_no_channels))
+                } else {
+                    hideStatus()
+                    startChannel(first, immediately = true)
+                }
+            }
+        }
+    }
+
+    /** Übernimmt die Senderliste. GitHub hat immer das letzte Wort. */
+    private fun applyList(list: List<Channel>, atStart: Boolean) {
+        if (list.isEmpty()) return
+        val wasFavorite = playingIsFavorite()
+        val previous = playing
+        favorites = list.toMutableList()
+        favIndex = if (atStart) {
+            favStore.findLastIndex(favorites)
+        } else {
+            previous?.let { old -> favorites.indexOfFirst { it.key == old.key } }
+                ?.takeIf { it >= 0 } ?: favIndex.coerceIn(0, favorites.size - 1)
+        }
+        syncFavorites()
+        refreshFavList()
+        if (atStart || !listReady) return
+        // Änderung im laufenden Betrieb: nur neu starten, wenn sich die Adresse geändert hat
+        if (wasFavorite || previous == null) {
+            val now = favorites.getOrNull(favIndex) ?: return
+            val restart = previous == null ||
+                now.key != previous.key ||
+                now.urls.firstOrNull()?.url != previous.urls.firstOrNull()?.url
+            if (restart) startChannel(now, immediately = true) else playing = now
+        }
+    }
+
     // ---------- Internetverbindung ----------
 
-    /** true, wenn die Box mit einem Netzwerk verbunden ist (auch von Hintergrund-Threads aus nutzbar). */
+    /** true, wenn die Box mit einem Netzwerk verbunden ist (auch aus Hintergrund-Threads nutzbar). */
     private fun isOnline(): Boolean {
         val cm = getSystemService(CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
         return try {
@@ -333,21 +378,19 @@ class MainActivity : Activity(), FavAdapter.Listener {
         handler.postDelayed(waitNet, 5_000)
     }
 
-    /** Internet ist (wieder) da: aktuelle Listen von GitHub holen und das Bild starten. */
+    /** Internet ist (wieder) da. */
     private fun onNetworkBack() {
         if (!waitingForNet) return
         waitingForNet = false
         handler.removeCallbacks(waitNet)
         hideStatus()
-        refreshDefaults()
         refreshCatalog()
-        retryCount = 0
-        playCurrent()
-    }
-
-    private fun runInBackground(task: () -> Unit) {
-        if (io.isShutdown) return
-        runCatching { io.execute(task) }
+        if (!listReady) {
+            loadListThenPlay()
+        } else {
+            retryCount = 0
+            playCurrent()
+        }
     }
 
     // =====================================================================
@@ -414,7 +457,8 @@ class MainActivity : Activity(), FavAdapter.Listener {
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(15_000)
             .setUserAgent(DEFAULT_USER_AGENT)
-        // 3 Sekunden vorladen, bevor das Bild startet (nach einem Stocker 5 Sekunden)
+        // Puffer: 3 Sekunden vorladen, bevor das Bild startet (nach einem Stocker 5 Sekunden),
+        // im laufenden Betrieb werden bis zu 50 Sekunden im Voraus geladen.
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(30_000, 50_000, 3_000, 5_000)
             .build()
@@ -445,6 +489,7 @@ class MainActivity : Activity(), FavAdapter.Listener {
         handler.removeCallbacks(retry)
         handler.removeCallbacks(delayedStart)
         val p = player ?: return
+        if (!listReady) return          // der Start-Ablauf startet den Stream selbst
         if (!isOnline()) {
             waitForInternet()
             return
@@ -452,8 +497,6 @@ class MainActivity : Activity(), FavAdapter.Listener {
         val ch = playing
         if (ch == null || ch.urls.isEmpty()) {
             showStatus(getString(R.string.status_no_channels))
-            handler.removeCallbacks(fetchUntilChannels)
-            handler.postDelayed(fetchUntilChannels, 5_000)
             return
         }
         if (urlIndex !in ch.urls.indices) urlIndex = 0
@@ -485,25 +528,15 @@ class MainActivity : Activity(), FavAdapter.Listener {
         return favorites.getOrNull(favIndex)?.key == p.key
     }
 
-    private fun isSkippable(ch: Channel): Boolean =
-        ch.key in missingKeys && health.state(ch.key) != HealthStore.State.OK
-
     private fun zap(delta: Int) {
-        if (favorites.isEmpty()) return
+        if (favorites.isEmpty() || !listReady) return
         // Lief gerade ein Sender aus "Alle Sender": erst zurück zum letzten eigenen Sender
         if (!playingIsFavorite()) {
             switchToFav(favIndex.coerceIn(0, favorites.size - 1), immediately = false)
             return
         }
         val size = favorites.size
-        var idx = favIndex
-        repeat(size) {
-            idx = ((idx + delta) % size + size) % size
-            if (!isSkippable(favorites[idx])) {
-                switchToFav(idx, immediately = false)
-                return
-            }
-        }
+        switchToFav(((favIndex + delta) % size + size) % size, immediately = false)
     }
 
     private fun switchToFav(index: Int, immediately: Boolean) {
@@ -529,14 +562,14 @@ class MainActivity : Activity(), FavAdapter.Listener {
     }
 
     // =====================================================================
-    // Senderlisten aus dem Internet
+    // Senderlisten aus dem Internet (im laufenden Betrieb)
     // =====================================================================
 
     private fun refreshDefaults() {
         lastDefaultsRefresh = System.currentTimeMillis()
         runInBackground {
             val fresh = favStore.fetchDefaultRemote() ?: return@runInBackground
-            handler.post { applyDefaults(fresh) }
+            handler.post { if (listReady) applyList(fresh, atStart = false) }
         }
     }
 
@@ -547,62 +580,26 @@ class MainActivity : Activity(), FavAdapter.Listener {
         }
     }
 
-    /** Neue Vorgabe aus sender.m3u – gilt nur, solange an der Box nichts bearbeitet wurde. */
-    private fun applyDefaults(fresh: List<Channel>) {
-        if (favStore.edited || editMode || fresh.isEmpty()) return
-        val wasFavorite = playingIsFavorite()
-        val previous = playing
-        favorites = fresh.toMutableList()
-        favIndex = previous?.let { old -> favorites.indexOfFirst { it.key == old.key } }
-            ?.takeIf { it >= 0 } ?: favStore.findLastIndex(favorites)
-        syncFavorites(updatePlaying = false)
-        refreshFavList()
-        if (wasFavorite || previous == null) {
-            val now = favorites.getOrNull(favIndex) ?: return
-            val restart = previous == null ||
-                now.urls.firstOrNull()?.url != previous.urls.firstOrNull()?.url
-            playing = now
-            if (restart) {
-                urlIndex = 0
-                playCurrent()
-            }
-        }
-    }
-
     private fun applyCatalog(fresh: Catalog) {
         catalog = fresh
-        if (favorites.isEmpty() && !favStore.edited) {
-            // Noch keine Vorgabe da (z. B. erster Start ohne Internet): Hauptsender als Startliste
-            favorites = fresh.groups.firstOrNull()?.channels.orEmpty().toMutableList()
-            favIndex = 0
-        }
         syncFavorites()
-        refreshFavList()
-        if (playing == null && favorites.isNotEmpty()) switchToFav(favIndex, immediately = true)
         if (allVisible() && groupAdapter.itemCount == 0) populateAll()
     }
 
     /**
-     * Gleicht "Meine Sender" mit der Gesamtliste ab: neue Adressen werden übernommen,
-     * eigene Adressen aus sender.m3u bleiben vorne. Nichts wird automatisch gelöscht.
+     * Ergänzt "Meine Sender" um Ersatzadressen aus der Gesamtliste.
+     * Die Adressen aus sender.m3u bleiben immer vorne; Sender werden nie hinzugefügt oder entfernt.
      */
-    private fun syncFavorites(updatePlaying: Boolean = true) {
+    private fun syncFavorites() {
         val cat = catalog ?: return
-        val missing = HashSet<String>()
-        val wasFavorite = updatePlaying && playingIsFavorite()
+        val wasFavorite = playingIsFavorite()
         for (i in favorites.indices) {
             val fav = favorites[i]
-            val match = cat.byKey[fav.key] ?: if (fav.isFromM3u) cat.match(fav) else null
-            if (match == null) {
-                if (!fav.isFromM3u) missing.add(fav.key)
-                continue
-            }
-            val urls = if (fav.isFromM3u) (fav.urls + match.urls).distinctBy { it.url } else match.urls
-            favorites[i] = fav.copy(urls = urls.take(5), logo = fav.logo.ifEmpty { match.logo })
+            val match = cat.match(fav) ?: continue
+            val urls = (fav.urls + match.urls).distinctBy { it.url }.take(5)
+            favorites[i] = fav.copy(urls = urls, logo = fav.logo.ifEmpty { match.logo })
         }
-        missingKeys = missing
         if (wasFavorite) playing = favorites.getOrNull(favIndex)
-        if (favStore.edited) favStore.save(favorites)
     }
 
     // =====================================================================
@@ -662,172 +659,46 @@ class MainActivity : Activity(), FavAdapter.Listener {
     // ---------- Meine Sender ----------
 
     private fun showFavList() {
+        if (!listReady) return
         if (System.currentTimeMillis() - lastDefaultsRefresh > 15 * 60_000L) refreshDefaults()
         infoBox.visibility = View.GONE
         allPanel.visibility = View.GONE
-        updateListHeader()
         refreshFavList(focus = false)
         listPanel.visibility = View.VISIBLE
         val pos = if (playingIsFavorite()) favIndex else 0
         (channelList.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(pos, 120)
         focusItem(channelList, pos)
-        restartTimer(hideList, if (editMode) EDIT_TIMEOUT else LIST_TIMEOUT)
+        restartTimer(hideList, LIST_TIMEOUT)
     }
 
     private fun hideFavList() {
         handler.removeCallbacks(hideList)
         listPanel.visibility = View.GONE
-        if (editMode) leaveEditMode(refocus = false)
         currentFocus?.clearFocus()
     }
 
-    private fun refreshFavList(focus: Boolean = true, focusPos: Int? = null) {
-        val pos = focusPos ?: focusedPosition(channelList)
+    private fun refreshFavList(focus: Boolean = true) {
+        val pos = focusedPosition(channelList)
         favAdapter.playingIndex = if (playingIsFavorite()) favIndex else -1
-        favAdapter.editMode = editMode
-        favAdapter.movingIndex = movingIndex
-        favAdapter.missingKeys = missingKeys
         favAdapter.submit(favorites)
         if (focus && listVisible() && pos >= 0) {
             focusItem(channelList, pos.coerceAtMost(favAdapter.itemCount - 1))
         }
     }
 
-    private fun updateListHeader() {
-        listTitle.setText(if (editMode) R.string.edit_title else R.string.list_title)
-        listHint.setText(
-            when {
-                movingIndex >= 0 -> R.string.edit_hint_moving
-                editMode -> R.string.edit_hint
-                else -> R.string.list_hint
-            }
-        )
-    }
-
     override fun onFavClick(index: Int) {
-        if (editMode) {
-            toggleMove(index)
-        } else {
-            hideFavList()
-            switchToFav(index, immediately = true)
-        }
+        hideFavList()
+        switchToFav(index, immediately = true)
     }
 
     override fun onAction(action: Int) {
-        when (action) {
-            FavAdapter.ACTION_ALL, FavAdapter.ACTION_ADD -> showAll()
-            FavAdapter.ACTION_RESET -> showDialog(
-                getString(R.string.reset_question),
-                getString(R.string.reset_text),
-                getString(R.string.cancel) to {},
-                getString(R.string.reset_yes) to { resetFavorites() }
-            )
-        }
-    }
-
-    // ---------- Bearbeiten ----------
-
-    private fun enterEditMode() {
-        val pos = focusedPosition(channelList)
-        editMode = true
-        movingIndex = -1
-        updateListHeader()
-        refreshFavList(focusPos = pos.coerceAtLeast(0))
-        restartTimer(hideList, EDIT_TIMEOUT)
-    }
-
-    private fun leaveEditMode(refocus: Boolean = true) {
-        if (movingIndex >= 0) markEdited()
-        editMode = false
-        movingIndex = -1
-        updateListHeader()
-        val pos = focusedPosition(channelList).coerceAtMost(favorites.size - 1)
-        refreshFavList(focus = refocus, focusPos = pos)
-        if (listVisible()) restartTimer(hideList, LIST_TIMEOUT)
-    }
-
-    private fun toggleMove(index: Int) {
-        if (index !in favorites.indices) return
-        if (movingIndex == index) {
-            movingIndex = -1
-            markEdited()
-        } else {
-            movingIndex = index
-        }
-        favAdapter.movingIndex = movingIndex
-        favAdapter.notifyItemChanged(index)
-        updateListHeader()
-    }
-
-    private fun moveFav(delta: Int) {
-        val from = movingIndex
-        val to = from + delta
-        if (from !in favorites.indices || to !in favorites.indices) return
-        val playingKey = if (playingIsFavorite()) playing?.key else null
-        Collections.swap(favorites, from, to)
-        if (playingKey != null) favIndex = favorites.indexOfFirst { it.key == playingKey }
-        movingIndex = to
-        favAdapter.movingIndex = to
-        favAdapter.playingIndex = -1
-        favAdapter.notifyItemMoved(from, to)
-        favAdapter.notifyItemRangeChanged(minOf(from, to), 2)
-        channelList.scrollToPosition(to)
-        focusItem(channelList, to)
-        markEdited()
-    }
-
-    private fun confirmRemove(index: Int) {
-        val ch = favorites.getOrNull(index) ?: return
-        showDialog(
-            getString(R.string.remove_question, ch.name),
-            getString(R.string.remove_text),
-            getString(R.string.remove_no) to {},
-            getString(R.string.remove_yes) to { removeFavorite(index) }
-        )
-    }
-
-    private fun removeFavorite(index: Int) {
-        if (index !in favorites.indices) return
-        // Wird der laufende Sender entfernt, läuft er weiter, zählt aber nicht mehr zu "Meine Sender".
-        favorites.removeAt(index)
-        if (index < favIndex) favIndex--
-        if (favIndex >= favorites.size) favIndex = (favorites.size - 1).coerceAtLeast(0)
-        markEdited()
-        refreshFavList(focusPos = index.coerceAtMost(favAdapter.itemCount - 1))
-    }
-
-    private fun resetFavorites() {
-        favStore.reset()
-        editMode = false
-        movingIndex = -1
-        val previousKey = playing?.key
-        favorites = favStore.loadDefaultLocal().toMutableList()
-        syncFavorites()
-        favIndex = favorites.indexOfFirst { it.key == previousKey }.takeIf { it >= 0 } ?: 0
-        updateListHeader()
-        refreshFavList(focusPos = 0)
-        refreshDefaults()
-    }
-
-    private fun markEdited() {
-        favStore.edited = true
-        favStore.save(favorites)
-    }
-
-    private fun addFavorite(ch: Channel) {
-        if (favorites.any { it.key == ch.key }) return
-        favorites.add(ch)
-        markEdited()
-        refreshFavList(focus = false)
-        allAdapter.favoriteKeys = favorites.map { it.key }.toSet()
-        allAdapter.refreshKey(ch.key)
-        Toast.makeText(this, getString(R.string.added_toast, ch.name, favorites.size), Toast.LENGTH_LONG).show()
+        // "Alle Sender …" kurz gedrückt: nur Hinweis, geöffnet wird mit 3 Sekunden Halten
+        Toast.makeText(this, R.string.all_hold_hint, Toast.LENGTH_SHORT).show()
     }
 
     // ---------- Alle Sender ----------
 
     private fun showAll() {
-        allOpenedFromEdit = editMode
         handler.removeCallbacks(hideList)
         listPanel.visibility = View.GONE
         allPanel.visibility = View.VISIBLE
@@ -879,7 +750,8 @@ class MainActivity : Activity(), FavAdapter.Listener {
         groupAdapter.notifyItemChanged(old)
         groupAdapter.notifyItemChanged(pos)
         val visible = group.channels.filter { health.state(it.key) != HealthStore.State.HIDDEN }
-        allAdapter.submit(visible, favorites.map { it.key }.toSet())
+        val favKeys = favorites.mapNotNull { cat.match(it)?.key }.toSet()
+        allAdapter.submit(visible, favKeys)
         allList.scrollToPosition(0)
         if (visible.isEmpty()) {
             allEmpty.setText(R.string.all_empty)
@@ -915,21 +787,8 @@ class MainActivity : Activity(), FavAdapter.Listener {
 
     private fun onAllChannelClick(index: Int) {
         val ch = allAdapter.channels.getOrNull(index) ?: return
-        val cat = catalog
-        val isFav = favorites.any { it.key == ch.key }
-        val groupName = cat?.groupOf(ch).orEmpty()
-        val line = if (health.state(ch.key) == HealthStore.State.FAIL)
-            getString(R.string.group_unreachable, groupName.ifEmpty { ch.name }) else groupName
-        val watch: Pair<String, () -> Unit> = getString(R.string.action_watch) to {
-            closeAllPanels()
-            startChannel(ch, immediately = true)
-        }
-        val add: Pair<String, () -> Unit> =
-            if (isFav) getString(R.string.action_already) to {}
-            else getString(R.string.action_add) to { addFavorite(ch) }
-        val cancel: Pair<String, () -> Unit> = getString(R.string.cancel) to {}
-        if (allOpenedFromEdit) showDialog(ch.name, line, add, watch, cancel)
-        else showDialog(ch.name, line, watch, add, cancel)
+        closeAllPanels()
+        startChannel(ch, immediately = true)
     }
 
     // ---------- Rückfragen ----------
@@ -1041,21 +900,7 @@ class MainActivity : Activity(), FavAdapter.Listener {
 
         // Meine Sender
         if (listVisible()) {
-            restartTimer(hideList, if (editMode) EDIT_TIMEOUT else LIST_TIMEOUT)
-            if (editMode && movingIndex >= 0) {
-                if (isUp || isDown) {
-                    if (down) moveFav(if (isUp) -1 else 1)
-                    return true
-                }
-                if (isSide) return true
-            }
-            if (editMode && code == KeyEvent.KEYCODE_DPAD_LEFT) {
-                if (down) {
-                    val pos = focusedPosition(channelList)
-                    if (pos in favorites.indices) confirmRemove(pos)
-                }
-                return true
-            }
+            restartTimer(hideList, LIST_TIMEOUT)
             if (isSide) return true
             return super.dispatchKeyEvent(event)
         }
@@ -1090,17 +935,17 @@ class MainActivity : Activity(), FavAdapter.Listener {
         }
     }
 
+    /** OK 3 Sekunden gehalten: auf "Alle Sender …" öffnet das die Gesamtliste. */
     private fun onOkLong() {
         if (!listVisible() || dialogVisible() || allVisible()) return
-        if (editMode) leaveEditMode() else enterEditMode()
+        val pos = focusedPosition(channelList)
+        if (pos >= favorites.size) showAll() else currentFocus?.performClick()
     }
 
     private fun onBackShort() {
         when {
             dialogVisible() -> hideDialog()
             allVisible() -> hideAll(backToList = true)
-            listVisible() && movingIndex >= 0 -> toggleMove(movingIndex)
-            listVisible() && editMode -> leaveEditMode()
             listVisible() -> hideFavList()
             !BuildConfig.IS_LAUNCHER -> showExitDialog()
             else -> showInfo()

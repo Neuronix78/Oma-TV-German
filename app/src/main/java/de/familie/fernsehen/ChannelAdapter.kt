@@ -27,7 +27,7 @@ class ActionHolder(view: View) : RecyclerView.ViewHolder(view) {
     val label: TextView = view.findViewById(R.id.actionLabel)
 }
 
-/** Liste "Meine Sender", im Bearbeiten-Modus mit Zusatzzeilen. */
+/** Liste "Meine Sender", ganz unten die Zeile "Alle Sender …". */
 class FavAdapter(private val listener: Listener) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     interface Listener {
@@ -37,8 +37,6 @@ class FavAdapter(private val listener: Listener) : RecyclerView.Adapter<Recycler
 
     companion object {
         const val ACTION_ALL = 1
-        const val ACTION_ADD = 2
-        const val ACTION_RESET = 3
         private const val TYPE_CHANNEL = 0
         private const val TYPE_ACTION = 1
     }
@@ -46,22 +44,13 @@ class FavAdapter(private val listener: Listener) : RecyclerView.Adapter<Recycler
     var favorites: List<Channel> = emptyList()
         private set
     var playingIndex = -1
-    var editMode = false
-    var movingIndex = -1
-    var missingKeys: Set<String> = emptySet()
 
     fun submit(list: List<Channel>) {
         favorites = list
         notifyDataSetChanged()
     }
 
-    fun actionAt(position: Int): Int = when {
-        !editMode -> ACTION_ALL
-        position == favorites.size -> ACTION_ADD
-        else -> ACTION_RESET
-    }
-
-    override fun getItemCount() = favorites.size + if (editMode) 2 else 1
+    override fun getItemCount() = favorites.size + 1
 
     override fun getItemViewType(position: Int) =
         if (position < favorites.size) TYPE_CHANNEL else TYPE_ACTION
@@ -77,24 +66,14 @@ class FavAdapter(private val listener: Listener) : RecyclerView.Adapter<Recycler
             holder
         } else {
             val holder = ActionHolder(inflater.inflate(R.layout.item_action, parent, false))
-            holder.itemView.setOnClickListener {
-                val pos = holder.bindingAdapterPosition
-                if (pos != RecyclerView.NO_POSITION) listener.onAction(actionAt(pos))
-            }
+            holder.itemView.setOnClickListener { listener.onAction(ACTION_ALL) }
             holder
         }
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        val ctx = holder.itemView.context
         if (holder is ActionHolder) {
-            holder.label.setText(
-                when (actionAt(position)) {
-                    ACTION_ALL -> R.string.action_all_channels
-                    ACTION_ADD -> R.string.action_add_channels
-                    else -> R.string.action_reset
-                }
-            )
+            holder.label.setText(R.string.action_all_channels)
             return
         }
         holder as ChannelHolder
@@ -102,19 +81,13 @@ class FavAdapter(private val listener: Listener) : RecyclerView.Adapter<Recycler
         holder.number.visibility = View.VISIBLE
         holder.number.text = (position + 1).toString()
         holder.showLogo(ch.logo)
-        holder.name.text = if (editMode && ch.key in missingKeys) ctx.getString(R.string.name_missing, ch.name) else ch.name
-        holder.itemView.alpha = if (ch.key in missingKeys) 0.6f else 1f
-        holder.itemView.setBackgroundResource(if (position == movingIndex) R.drawable.bg_moving else R.drawable.bg_focus)
-        when {
-            position == movingIndex -> {
-                holder.marker.text = "⇅"
-                holder.marker.visibility = View.VISIBLE
-            }
-            position == playingIndex && !editMode -> {
-                holder.marker.text = "▶"
-                holder.marker.visibility = View.VISIBLE
-            }
-            else -> holder.marker.visibility = View.GONE
+        holder.name.text = ch.name
+        holder.itemView.alpha = 1f
+        if (position == playingIndex) {
+            holder.marker.text = "▶"
+            holder.marker.visibility = View.VISIBLE
+        } else {
+            holder.marker.visibility = View.GONE
         }
     }
 }
